@@ -37,13 +37,38 @@ def get_database() -> AsyncIOMotorDatabase:
 
 
 async def create_indexes(db: AsyncIOMotorDatabase) -> None:
+    # users
     await db.users.create_index("email", unique=True)
-    await db.classes.create_index("class_name")
-    await db.classes.create_index("status")
-    await db.enrollments.create_index(
-        [("student_id", 1), ("class_id", 1)],
-        unique=True,
-    )
-    await db.enrollments.create_index("student_id")
-    await db.enrollments.create_index("class_id")
-    await db.enrollments.create_index("status")
+    await db.users.create_index("role")
+
+    # courses
+    await db.courses.create_index("teacher_id")
+    await db.courses.create_index("level")
+    await db.courses.create_index("status")
+    await db.courses.create_index("manual_tags")
+    await db.courses.create_index("extracted_skills")
+    await db.courses.create_index([("title", "text"), ("description", "text")])
+
+    # course_resources
+    await db.course_resources.create_index("course_id")
+    await db.course_resources.create_index("uploaded_by")
+    await db.course_resources.create_index("processing_status")
+    await db.course_resources.create_index("file_type")
+    await db.course_resources.create_index("extracted_skills")
+
+    # student_profiles
+    await db.student_profiles.create_index("student_id")
+    await db.student_profiles.create_index("current_level")
+    await db.student_profiles.create_index("desired_skills")
+    await db.student_profiles.create_index("career_goal")
+
+    # recommendations
+    await db.recommendations.create_index("student_id")
+    await db.recommendations.create_index("student_profile_id")
+    await db.recommendations.create_index([("created_at", -1)])
+
+    # processing_logs
+    await db.processing_logs.create_index("resource_id")
+    await db.processing_logs.create_index("course_id")
+    await db.processing_logs.create_index([("created_at", -1)])
+    await db.processing_logs.create_index("status")

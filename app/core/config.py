@@ -35,6 +35,13 @@ def _optional_int_env(name: str, default: int) -> int:
         raise RuntimeError(f"Environment variable {name} must be an integer") from exc
 
 
+def _optional_bool_env(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str
@@ -44,6 +51,10 @@ class Settings:
     jwt_algorithm: str
     access_token_expire_minutes: int
     frontend_url: str
+    upload_dir: str
+    max_upload_size_mb: int
+    use_openai_extraction: bool
+    openai_api_key: str
 
     @property
     def cors_origins(self) -> list[str]:
@@ -68,7 +79,7 @@ class Settings:
 @lru_cache
 def get_settings() -> Settings:
     return Settings(
-        app_name=_optional_env("APP_NAME", "ClassEnroll Mini API"),
+        app_name=_optional_env("APP_NAME", "EduMatch Resource Mapping API"),
         mongodb_url=_required_env("MONGODB_URL"),
         mongodb_db_name=_required_env("MONGODB_DB_NAME"),
         jwt_secret_key=_required_env("JWT_SECRET_KEY"),
@@ -78,4 +89,8 @@ def get_settings() -> Settings:
             60,
         ),
         frontend_url=_optional_env("FRONTEND_URL", "http://localhost:5173"),
+        upload_dir=_optional_env("UPLOAD_DIR", "uploads"),
+        max_upload_size_mb=_optional_int_env("MAX_UPLOAD_SIZE_MB", 20),
+        use_openai_extraction=_optional_bool_env("USE_OPENAI_EXTRACTION", False),
+        openai_api_key=_optional_env("OPENAI_API_KEY", ""),
     )

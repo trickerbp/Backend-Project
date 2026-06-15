@@ -10,8 +10,10 @@ from app.core.config import get_settings
 from app.database.mongodb import close_mongo_connection, connect_to_mongo
 from app.routes import (
     auth_router,
-    class_router,
-    enrollment_router,
+    course_resource_router,
+    course_router,
+    recommendation_router,
+    student_profile_router,
     user_router,
 )
 
@@ -28,7 +30,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    description="RESTful API for ClassEnroll Mini class enrollment system.",
+    description=(
+        "RESTful API for EduMatch Resource Mapping — mapping courses to "
+        "student learning needs based on course resources."
+    ),
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -43,14 +48,16 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
-app.include_router(class_router)
-app.include_router(enrollment_router)
+app.include_router(course_router)
+app.include_router(course_resource_router)
+app.include_router(student_profile_router)
+app.include_router(recommendation_router)
 app.include_router(user_router)
 
 
 @app.get("/", tags=["Health"])
 async def health_check() -> dict[str, str]:
     return {
-        "message": "ClassEnroll Mini API is running",
+        "message": "EduMatch Resource Mapping API is running",
         "docs": "/docs",
     }

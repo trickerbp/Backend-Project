@@ -1,17 +1,29 @@
-
 from app.schemas.auth_schema import LoginRequest, TokenResponse
-from app.schemas.class_schema import ClassCreate, ClassResponse, ClassUpdate
-from app.schemas.enrollment_schema import EnrollmentCreate, EnrollmentResponse
+from app.schemas.course_schema import CourseCreate, CourseResponse, CourseUpdate
+from app.schemas.course_resource_schema import CourseResourceResponse
+from app.schemas.recommendation_schema import (
+    GenerateRecommendationRequest,
+    RecommendationResponse,
+)
+from app.schemas.student_profile_schema import (
+    StudentProfileCreate,
+    StudentProfileResponse,
+    StudentProfileUpdate,
+)
 from app.schemas.user_schema import UserCreate, UserPublic
 
 
 __all__ = [
-    "ClassCreate",
-    "ClassResponse",
-    "ClassUpdate",
-    "EnrollmentCreate",
-    "EnrollmentResponse",
+    "CourseCreate",
+    "CourseResponse",
+    "CourseResourceResponse",
+    "CourseUpdate",
+    "GenerateRecommendationRequest",
     "LoginRequest",
+    "RecommendationResponse",
+    "StudentProfileCreate",
+    "StudentProfileResponse",
+    "StudentProfileUpdate",
     "TokenResponse",
     "UserCreate",
     "UserPublic",

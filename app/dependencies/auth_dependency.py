@@ -59,3 +59,25 @@ async def require_student(
             detail="Student permission required",
         )
     return current_user
+
+
+async def require_teacher(
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    if current_user.get("role") != "teacher":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teacher permission required",
+        )
+    return current_user
+
+
+async def require_teacher_or_admin(
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    if current_user.get("role") not in {"teacher", "admin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teacher or admin permission required",
+        )
+    return current_user

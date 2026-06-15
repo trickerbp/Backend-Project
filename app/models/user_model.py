@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -7,6 +6,8 @@ from typing import Any
 
 USERS_COLLECTION = "users"
 
+VALID_ROLES = {"admin", "teacher", "student"}
+
 
 def create_user_document(
     name: str,
@@ -14,12 +15,14 @@ def create_user_document(
     password_hash: str,
     role: str,
 ) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
     return {
         "name": name,
         "email": email.lower(),
         "password_hash": password_hash,
         "role": role,
-        "created_at": datetime.now(timezone.utc),
+        "created_at": now,
+        "updated_at": now,
     }
 
 
