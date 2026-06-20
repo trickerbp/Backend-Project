@@ -46,6 +46,19 @@ def _first_nonempty(source: Mapping[str, Any], *keys: str) -> str:
             return str(value).strip()
     return ""
 
+def _merge_unique(*groups: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for value in group:
+            text = str(value).strip()
+            key = text.casefold()
+            if not text or key in seen:
+                continue
+            seen.add(key)
+            merged.append(text)
+    return merged
+
 
 def parse_duration_hours(value: Any) -> int | None:
     """Pull a course duration in hours from text like '40 giờ, gồm 14 buổi'.
@@ -141,10 +154,26 @@ def normalize_course(source: Mapping[str, Any]) -> dict[str, Any]:
         extracted_skills = canonicalize_skills(
             _as_list(source.get("extracted_skills"))
         )
-        extracted_topics = canonicalize_topics(
-            _as_list(source.get("extracted_topics"))
-        )
         target_goals = _as_list(source.get("target_goals"))
+        topic_text = " ".join(
+            str(source.get(key, ""))
+            for key in (
+                "title",
+                "description",
+                "manual_tags",
+                "extracted_skills",
+                "extracted_topics",
+                "target_goals",
+                "cleaned_text",
+                "raw_text",
+            )
+        )
+        extracted_topics = _merge_unique(
+            canonicalize_topics(_as_list(source.get("extracted_topics"))),
+            canonicalize_topics(_as_list(source.get("manual_tags"))),
+            canonicalize_topics(target_goals),
+            extract_topics(topic_text),
+        )
         prerequisites = _as_list(
             source.get("extracted_prerequisites") or source.get("prerequisites")
         )

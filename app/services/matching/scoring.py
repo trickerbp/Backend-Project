@@ -104,6 +104,9 @@ _LEVEL_ORDER = {"beginner": 0, "intermediate": 1, "advanced": 2}
 
 # Unmet prerequisites gate the course down rather than excluding it.
 _PREREQUISITE_PENALTY = 0.5
+_IMPLIED_SKILL_KEYS = {
+    "rest api": ("api",),
+}
 
 
 def _lower_set(values: list[str] | None) -> set[str]:
@@ -124,6 +127,9 @@ def _course_skill_pool(course: Mapping[str, Any]) -> dict[str, str]:
     pool: dict[str, str] = {}
     for source_key in ("course_skills", "extracted_skills", "manual_tags"):
         pool.update(_display_map(course.get(source_key)))
+    for key, display in list(pool.items()):
+        for implied_key in _IMPLIED_SKILL_KEYS.get(key, ()):
+            pool.setdefault(implied_key, display)
     return pool
 
 
