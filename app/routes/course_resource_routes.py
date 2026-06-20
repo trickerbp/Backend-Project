@@ -86,6 +86,10 @@ async def upload_resource(
     )
     result = await db.course_resources.insert_one(resource_doc)
     resource_doc["_id"] = result.inserted_id
+    try:
+        resource_doc = await course_resource_service.process_resource(db, resource_doc)
+    except Exception:
+        resource_doc = await db.course_resources.find_one({"_id": result.inserted_id}) or resource_doc
     return resource_to_public(resource_doc)
 
 

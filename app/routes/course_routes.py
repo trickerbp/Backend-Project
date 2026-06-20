@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
+import tempfile
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from app.core.config import get_settings
 from app.database.mongodb import get_database
 from app.dependencies.auth_dependency import (
     get_current_user,
@@ -15,11 +18,28 @@ from app.models.course_model import (
     course_to_public,
     create_course_document,
 )
+from app.models.course_resource_model import VALID_FILE_TYPES
 from app.schemas.course_schema import CourseCreate, CourseResponse, CourseUpdate
+from app.services.document_preview_service import preview_course_from_file
+from app.services.file_extraction_service import detect_file_type
 from app.utils.objectid import to_object_id
 
 
 router = APIRouter(prefix="/api/courses", tags=["Courses"])
+
+
+async def _save_preview_upload(file: UploadFile, file_type: str) -> Path:
+    settings = get_settings()
+    content = await file.read()
+    max_bytes = settings.max_upload_size_mb * 1024 * 1024
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"File exceeds {settings.max_upload_size_mb}MB limit",
+        )
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_type}") as temporary:
+        temporary.write(content)
+        return Path(temporary.name)
 
 
 def _is_owner_or_admin(course: dict, user: dict) -> bool:
@@ -104,6 +124,25 @@ async def create_course(
     result = await db.courses.insert_one(course_doc)
     course_doc["_id"] = result.inserted_id
     return course_to_public(course_doc)
+
+
+@router.post("/extract-preview")
+async def extract_course_preview(
+    file: UploadFile = File(...),
+    _: dict = Depends(require_teacher_or_admin),
+) -> dict[str, object]:
+    file_type = detect_file_type(file.filename or "")
+    if file_type not in VALID_FILE_TYPES:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Only pdf, pptx, docx files are allowed",
+        )
+
+    temporary_path = await _save_preview_upload(file, file_type)
+    try:
+        return preview_course_from_file(str(temporary_path), file_type)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 @router.put("/{course_id}", response_model=CourseResponse)
