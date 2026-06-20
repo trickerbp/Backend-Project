@@ -76,11 +76,11 @@ def preview_course_from_file(file_path: str, file_type: str) -> dict[str, Any]:
     cleaned_text = cleaner.clean_text(raw_text)
     info = core_extractor.extract_course_info(cleaned_text)
     title = info.get("extracted_title") or _first_meaningful_line(cleaned_text)
-    description = info.get("summary") or info.get("extracted_description") or _excerpt(cleaned_text)
+    description = info.get("extracted_description") or info.get("summary") or _excerpt(cleaned_text)
 
     return {
         "title": title,
-        "course_code": "",
+        "course_code": info.get("course_code") or "",
         "description": description,
         "level": info.get("extracted_level") or "beginner",
         "target_goals": info.get("extracted_objectives", []),
