@@ -5,13 +5,13 @@ from typing import Any
 
 from bson import ObjectId
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.security import decode_access_token
 from app.database.mongodb import get_database
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+bearer_scheme = HTTPBearer()
 
 
 def _credentials_exception() -> HTTPException:
@@ -22,7 +22,10 @@ def _credentials_exception() -> HTTPException:
     )
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any]:
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> dict[str, Any]:
+    token = credentials.credentials
     payload = decode_access_token(token)
     if payload is None:
         raise _credentials_exception()

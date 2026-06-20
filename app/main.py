@@ -12,6 +12,7 @@ from app.routes import (
     auth_router,
     course_resource_router,
     course_router,
+    processing_log_router,
     recommendation_router,
     student_profile_router,
     user_router,
@@ -50,6 +51,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(course_router)
 app.include_router(course_resource_router)
+app.include_router(processing_log_router)
 app.include_router(student_profile_router)
 app.include_router(recommendation_router)
 app.include_router(user_router)
