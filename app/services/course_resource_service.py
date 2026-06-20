@@ -6,7 +6,9 @@ from typing import Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from app.core.config import get_settings
 from app.services import text_cleaning_service as cleaner
+from app.services import azure_document_ocr_service
 from app.services.matching.core_engine import core_extractor
 from app.services.processing_log_service import write_processing_log
 
@@ -45,7 +47,6 @@ async def process_resource(
     course_id = resource["course_id"]
     file_path = resource["file_path"]
     file_type = resource["file_type"]
-
     await _set_resource(db, resource_id, {"processing_status": "processing"})
 
     try:
@@ -62,6 +63,31 @@ async def process_resource(
     await _set_resource(db, resource_id, {"raw_text": raw_text})
     await _log(db, resource_id, course_id, "extract_text", "success",
                f"Extracted {len(raw_text)} characters.")
+
+    if _should_use_azure_ocr(raw_text, file_type):
+        try:
+            ocr_text = azure_document_ocr_service.extract_text(file_path)
+        except Exception as exc:  # noqa: BLE001 - fallback failure should be explicit
+            await _log(db, resource_id, course_id, "azure_document_ocr", "failed", str(exc))
+        else:
+            if len(ocr_text.strip()) > len(raw_text.strip()):
+                raw_text = ocr_text
+                await _set_resource(
+                    db,
+                    resource_id,
+                    {
+                        "raw_text": raw_text,
+                        "ocr_provider": "azure_document_intelligence",
+                    },
+                )
+                await _log(
+                    db,
+                    resource_id,
+                    course_id,
+                    "azure_document_ocr",
+                    "success",
+                    f"Extracted {len(raw_text)} characters with Azure OCR.",
+                )
 
     cleaned = cleaner.clean_text(raw_text)
     await _set_resource(db, resource_id, {"cleaned_text": cleaned})
@@ -118,3 +144,12 @@ async def _sync_course_metadata(
         "updated_at": datetime.now(timezone.utc),
     }
     await db.courses.update_one({"_id": course_id}, {"$set": update})
+
+
+def _should_use_azure_ocr(raw_text: str, file_type: str) -> bool:
+    settings = get_settings()
+    if not settings.use_azure_document_intelligence:
+        return False
+    if file_type not in {"pdf", "docx", "pptx"}:
+        return False
+    return len(raw_text.strip()) < settings.ocr_min_text_chars

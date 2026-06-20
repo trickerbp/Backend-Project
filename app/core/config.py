@@ -55,6 +55,10 @@ class Settings:
     max_upload_size_mb: int
     use_openai_extraction: bool
     openai_api_key: str
+    use_azure_document_intelligence: bool
+    azure_document_intelligence_endpoint: str
+    azure_document_intelligence_key: str
+    ocr_min_text_chars: int
 
     @property
     def cors_origins(self) -> list[str]:
@@ -93,4 +97,17 @@ def get_settings() -> Settings:
         max_upload_size_mb=_optional_int_env("MAX_UPLOAD_SIZE_MB", 20),
         use_openai_extraction=_optional_bool_env("USE_OPENAI_EXTRACTION", False),
         openai_api_key=_optional_env("OPENAI_API_KEY", ""),
+        use_azure_document_intelligence=_optional_bool_env(
+            "USE_AZURE_DOCUMENT_INTELLIGENCE",
+            False,
+        ),
+        azure_document_intelligence_endpoint=_optional_env(
+            "AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT",
+            "",
+        ),
+        azure_document_intelligence_key=_optional_env(
+            "AZURE_DOCUMENT_INTELLIGENCE_KEY",
+            "",
+        ),
+        ocr_min_text_chars=_optional_int_env("OCR_MIN_TEXT_CHARS", 300),
     )
