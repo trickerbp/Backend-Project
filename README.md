@@ -168,3 +168,60 @@ Xem `.env.example` để biết danh sách đầy đủ. Các biến chính:
 - `FRONTEND_URL`
 - `UPLOAD_DIR`, `MAX_UPLOAD_SIZE_MB`
 - `OPENAI_API_KEY`, `USE_OPENAI_EXTRACTION`, `USE_EMBEDDING_MATCHING`
+- `OPENAI_EXTRACTION_MODEL`, `OPENAI_EXTRACTION_MAX_INPUT_CHARS`,
+  `OPENAI_EXTRACTION_MAX_OUTPUT_TOKENS`,
+  `OPENAI_EXTRACTION_MIN_MISSING_FIELDS`,
+  `OPENAI_EXTRACTION_TIMEOUT_SECONDS`
+- `OPENAI_EMBEDDING_MODEL`, `OPENAI_EMBEDDING_DIMENSIONS`,
+  `OPENAI_EMBEDDING_TIMEOUT_SECONDS`
+- `OPENAI_EMBEDDING_MAX_INPUT_CHARS`,
+  `OPENAI_EMBEDDING_SKIP_IF_LOCAL_AT_LEAST`,
+  `OPENAI_EMBEDDING_SKIP_IF_LOCAL_BELOW`,
+  `OPENAI_EMBEDDING_EXPAND_LOW_CONFIDENCE`
+
+## 8. Thuật toán gợi ý khóa học
+
+Recommender dùng luồng semantic-first:
+
+- Học viên nhập một `intent_text` tự nhiên hoặc upload file.
+- Backend rút trích intent: skill, topic, role, câu trả lời bổ sung.
+- Tạo điểm semantic giữa intent và từng khóa học.
+- Ghi nhận hành vi `view/select/save` để lần ranking sau có personalization.
+- Lọc, xếp hạng và trả top recommendations.
+
+Điểm tổng hợp có giải thích:
+
+- `semantic`: trục chính, hiểu ngữ nghĩa/ngữ cảnh giữa nhu cầu và khóa học.
+  Mặc định chạy local bằng taxonomy + text similarity; bật
+  `USE_EMBEDDING_MATCHING=true` để dùng OpenAI embeddings nếu có
+  `OPENAI_API_KEY`. Model mặc định: `text-embedding-3-small`.
+- `behavior`: ưu tiên khóa học giống những môn học viên đã xem/chọn gần đây.
+- `skill_gap`: kỹ năng học viên muốn học so với kỹ năng khóa học. Hỗ trợ alias
+  và kỹ năng liên quan, ví dụ `trí tuệ nhân tạo` -> `AI` và liên quan đến
+  `Machine Learning`, `Deep Learning`, `LLM`.
+- `topic`, `goal`: so khớp lĩnh vực và mục tiêu nghề nghiệp.
+- `level`, `duration`: tín hiệu phụ, có thể bỏ trống.
+
+Response có `score_detail.semantic_match_score` và
+`score_detail.behavior_match_score`.
+
+Rút trích dữ liệu có hai tầng:
+
+- Tầng 1: parser/OCR local + Azure Document Intelligence đọc text và rule-based
+  extractor lấy field.
+- Tầng 2: GPT extraction optional. Bật `USE_OPENAI_EXTRACTION=true` để dùng
+  `OPENAI_EXTRACTION_MODEL` enrich JSON khi parser thiếu nhiều field.
+  Mặc định model: `gpt-5.4-mini`.
+
+Để tiết kiệm token/API:
+
+- OpenAI extraction và embedding mặc định tắt.
+- GPT extraction chỉ chạy khi thiếu ít nhất
+  `OPENAI_EXTRACTION_MIN_MISSING_FIELDS` field, và chỉ gửi text rút gọn theo
+  `OPENAI_EXTRACTION_MAX_INPUT_CHARS`.
+- Khi bật, backend chỉ gọi OpenAI cho ca mơ hồ: local score nằm giữa
+  `OPENAI_EMBEDDING_SKIP_IF_LOCAL_BELOW` và
+  `OPENAI_EMBEDDING_SKIP_IF_LOCAL_AT_LEAST`.
+- Không gửi raw text dài; chỉ gửi intent/tags/summary rút gọn, giới hạn bởi
+  `OPENAI_EMBEDDING_MAX_INPUT_CHARS`.
+- Hai đoạn cần so khớp được gửi chung trong một request và cache trong memory.

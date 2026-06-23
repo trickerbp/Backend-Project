@@ -3,6 +3,7 @@ from app.schemas.course_schema import CourseCreate, CourseResponse, CourseUpdate
 from app.schemas.course_resource_schema import CourseResourceResponse
 from app.schemas.recommendation_schema import (
     GenerateRecommendationRequest,
+    RecommendationEventCreate,
     RecommendationResponse,
 )
 from app.schemas.student_profile_schema import (
@@ -20,6 +21,7 @@ __all__ = [
     "CourseUpdate",
     "GenerateRecommendationRequest",
     "LoginRequest",
+    "RecommendationEventCreate",
     "RecommendationResponse",
     "StudentProfileCreate",
     "StudentProfileResponse",

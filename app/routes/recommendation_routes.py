@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database.mongodb import get_database
@@ -7,6 +9,7 @@ from app.dependencies.auth_dependency import require_student
 from app.models.recommendation_model import recommendation_to_public
 from app.schemas.recommendation_schema import (
     GenerateRecommendationRequest,
+    RecommendationEventCreate,
     RecommendationResponse,
 )
 from app.services import recommendation_service
@@ -14,6 +17,28 @@ from app.utils.objectid import to_object_id
 
 
 router = APIRouter(prefix="/api/recommendations", tags=["Recommendations"])
+
+@router.post("/events", status_code=status.HTTP_201_CREATED)
+async def track_event(
+    payload: RecommendationEventCreate,
+    current_user: dict = Depends(require_student),
+) -> dict[str, str]:
+    db = get_database()
+    course_id = to_object_id(payload.course_id, "course_id")
+    course = await db.courses.find_one({"_id": course_id}, {"_id": 1})
+    if course is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Course not found")
+
+    await db.recommendation_events.insert_one(
+        {
+            "student_id": current_user["_id"],
+            "course_id": course_id,
+            "event_type": payload.event_type,
+            "source": payload.source,
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+    return {"status": "ok"}
 
 
 @router.post("/generate", response_model=RecommendationResponse, status_code=status.HTTP_201_CREATED)

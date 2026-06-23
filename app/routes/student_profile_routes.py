@@ -50,6 +50,8 @@ async def create_profile(
     profile_doc = create_profile_document(
         student_id=current_user["_id"],
         source_type="manual_form",
+        intent_text=payload.intent_text,
+        question_answers=payload.question_answers,
         career_goal=payload.career_goal,
         current_level=payload.current_level,
         current_skills=payload.current_skills,

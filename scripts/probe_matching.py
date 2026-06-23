@@ -98,8 +98,9 @@ def score(profile, course, label):
     d = m.score_detail
     print(f"\n  [{label}] total={round(m.score,4)} prereq_met={m.prerequisites_met}")
     print(
-        f"    skill_gap={d.skill_gap} topic={d.topic} level={d.level} "
-        f"goal={d.goal} dur={d.duration} sim={round(d.text_similarity,4)}"
+        f"    skill_gap={d.skill_gap} semantic={d.semantic} behavior={d.behavior} "
+        f"topic={d.topic} level={d.level} goal={d.goal} dur={d.duration} "
+        f"sim={round(d.text_similarity,4)}"
     )
     print(f"    matched_skills={m.matched_skills} missing={m.missing_skills}")
     return m

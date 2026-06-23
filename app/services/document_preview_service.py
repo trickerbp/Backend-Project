@@ -6,6 +6,7 @@ from typing import Any
 
 from app.core.config import get_settings
 from app.services import azure_document_ocr_service
+from app.services import openai_extraction_service
 from app.services import text_cleaning_service as cleaner
 from app.services.matching.core_engine import core_extractor
 from app.services.matching.normalize import parse_hours_per_week
@@ -75,6 +76,7 @@ def preview_course_from_file(file_path: str, file_type: str) -> dict[str, Any]:
     raw_text, ocr_provider = _parse_with_optional_ocr(file_path, file_type)
     cleaned_text = cleaner.clean_text(raw_text)
     info = core_extractor.extract_course_info(cleaned_text)
+    info = openai_extraction_service.maybe_enrich_course_info(cleaned_text, info)
     title = info.get("extracted_title") or _first_meaningful_line(cleaned_text)
     description = info.get("extracted_description") or info.get("summary") or _excerpt(cleaned_text)
 
@@ -120,17 +122,19 @@ def preview_student_profile_from_file(file_path: str, file_type: str) -> dict[st
     owned = {skill.casefold() for skill in current_skills}
     desired_skills = [skill for skill in desired_skills if skill.casefold() not in owned]
     career_goal = canonical_role(goal_text or cleaned_text) or _first_meaningful_line(goal_text)
-
-    return {
+    info = {
         "source_type": "uploaded_file",
+        "intent_text": _excerpt(cleaned_text, 1200),
+        "question_answers": {},
         "career_goal": career_goal,
-        "current_level": normalize_level(cleaned_text) or "beginner",
+        "current_level": normalize_level(cleaned_text),
         "current_skills": current_skills,
         "desired_skills": desired_skills,
         "interested_topics": extract_topics("\n".join([goal_text, desired_text, cleaned_text])),
         "hours_per_week": parse_hours_per_week(cleaned_text),
-        "learning_format": normalize_learning_format(cleaned_text) or "online",
+        "learning_format": normalize_learning_format(cleaned_text),
         "raw_text_length": len(raw_text),
         "cleaned_text_length": len(cleaned_text),
         "ocr_provider": ocr_provider,
     }
+    return openai_extraction_service.maybe_enrich_profile_info(cleaned_text, info)

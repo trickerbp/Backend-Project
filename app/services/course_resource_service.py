@@ -7,6 +7,7 @@ from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.config import get_settings
+from app.services import openai_extraction_service
 from app.services import text_cleaning_service as cleaner
 from app.services import azure_document_ocr_service
 from app.services.matching.core_engine import core_extractor
@@ -101,6 +102,7 @@ async def process_resource(
         return await db.course_resources.find_one({"_id": resource_id})
 
     info = core_extractor.extract_course_info(cleaned)
+    info = openai_extraction_service.maybe_enrich_course_info(cleaned, info)
     await _set_resource(db, resource_id, info)
     await _log(db, resource_id, course_id, "extract_course_info", "success",
                "Extracted course info from text.")

@@ -46,6 +46,19 @@ def _first_nonempty(source: Mapping[str, Any], *keys: str) -> str:
             return str(value).strip()
     return ""
 
+def _answers_text(value: Any) -> str:
+    if not isinstance(value, Mapping):
+        return ""
+    parts: list[str] = []
+    for key, answer in value.items():
+        if isinstance(answer, (list, tuple, set)):
+            answer_text = " ".join(str(item).strip() for item in answer if str(item).strip())
+        else:
+            answer_text = str(answer or "").strip()
+        if answer_text:
+            parts.append(f"{key}: {answer_text}")
+    return " ".join(parts)
+
 def _merge_unique(*groups: list[str]) -> list[str]:
     merged: list[str] = []
     seen: set[str] = set()
@@ -204,6 +217,7 @@ def normalize_course(source: Mapping[str, Any]) -> dict[str, Any]:
         "extracted_prerequisites": prerequisites,
         "tools": tools,
         "duration_hours": duration,
+        "behavior_score": source.get("behavior_score"),
         # Combined free text used for the text-similarity dimension.
         "content_text": " ".join(
             part for part in (title, description, content_text) if part
@@ -219,6 +233,7 @@ def _is_already_normalized_profile(source: Mapping[str, Any]) -> bool:
             "current_skills",
             "desired_skills",
             "current_level",
+            "intent_text",
         )
     )
 
@@ -233,16 +248,32 @@ def normalize_student_profile(source: Mapping[str, Any]) -> dict[str, Any]:
         career_goal = _first_nonempty(source, "career_goal")
         current_level = normalize_level(source.get("current_level"))
         current_skills = canonicalize_skills(_as_list(source.get("current_skills")))
-        desired_skills = canonicalize_skills(_as_list(source.get("desired_skills")))
-        interested = canonicalize_topics(_as_list(source.get("interested_topics")))
+        intent_text = _first_nonempty(source, "intent_text")
+        answers_text = _answers_text(source.get("question_answers"))
+        background_text = " ".join(
+            part
+            for part in (
+                intent_text,
+                answers_text,
+                _first_nonempty(source, "cleaned_text", "raw_text"),
+            )
+            if part
+        )
+        explicit_desired = canonicalize_skills(_as_list(source.get("desired_skills")))
+        desired_skills = explicit_desired or canonicalize_skills(
+            extract_skills(f"{intent_text} {answers_text}")
+        )
+        explicit_topics = canonicalize_topics(_as_list(source.get("interested_topics")))
+        interested = explicit_topics or canonicalize_topics(
+            extract_topics(f"{intent_text} {answers_text}")
+        )
         hours = parse_hours_per_week(source.get("hours_per_week"))
         learning_format = normalize_learning_format(
             source.get("learning_format")
         )
-        background_text = _first_nonempty(
-            source, "cleaned_text", "raw_text"
-        )
         goal_text = career_goal
+        if not career_goal:
+            career_goal = canonical_role(background_text) or ""
     else:
         background = _first_nonempty(source, "kien_thuc_nen_tang")
         goal_text = _first_nonempty(source, "muc_tieu_hoc_tap")
@@ -268,6 +299,8 @@ def normalize_student_profile(source: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "student_id": _first_nonempty(source, "student_id", "_id", "id") or None,
         "source_type": _first_nonempty(source, "source_type") or "uploaded_file",
+        "intent_text": _first_nonempty(source, "intent_text") or None,
+        "question_answers": source.get("question_answers") or {},
         "career_goal": career_goal or None,
         "current_level": current_level,
         "current_skills": current_skills,

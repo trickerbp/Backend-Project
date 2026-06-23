@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
 
 class ScoreDetail(BaseModel):
     skill_gap_score: float = 0
+    semantic_match_score: float = 0
+    behavior_match_score: float = 0
     topic_match_score: float = 0
     level_match_score: float = 0
     goal_match_score: float = 0
@@ -41,3 +43,8 @@ class RecommendationResponse(BaseModel):
 
 class GenerateRecommendationRequest(BaseModel):
     student_profile_id: Optional[str] = None
+
+class RecommendationEventCreate(BaseModel):
+    course_id: str
+    event_type: Literal["view", "select", "save", "dismiss"] = "view"
+    source: Optional[str] = None

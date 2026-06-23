@@ -76,6 +76,7 @@ def candidate_grid() -> list[ScoreWeights]:
         grid.append(
             ScoreWeights(
                 skill_gap=skill,
+                semantic=0.55,
                 topic=topic,
                 goal=goal,
                 level=level,
@@ -135,8 +136,9 @@ def main() -> int:
 
     print("\n--- winning weights ---")
     print(
-        f"  ScoreWeights(skill_gap={best.skill_gap}, topic={best.topic}, "
-        f"goal={best.goal}, level={best.level}, duration={best.duration}, "
+        f"  ScoreWeights(semantic={best.semantic}, behavior={best.behavior}, "
+        f"skill_gap={best.skill_gap}, topic={best.topic}, goal={best.goal}, "
+        f"level={best.level}, duration={best.duration}, "
         f"text_similarity_bonus={best.text_similarity_bonus})"
     )
     return 0

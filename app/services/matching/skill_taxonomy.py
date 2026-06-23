@@ -9,6 +9,8 @@ __all__ = [
     "canonical_skill",
     "canonical_topic",
     "canonical_role",
+    "skill_similarity",
+    "topic_similarity",
     "extract_skills",
     "extract_topics",
     "canonicalize_skills",
@@ -19,6 +21,8 @@ __all__ = [
     "SKILL_ALIASES",
     "TOPIC_ALIASES",
     "ROLE_ALIASES",
+    "RELATED_SKILLS",
+    "RELATED_TOPICS",
     "VALID_LEVELS",
     "VALID_LEARNING_FORMATS",
 ]
@@ -71,6 +75,22 @@ SKILL_ALIASES: dict[str, tuple[str, ...]] = {
     "Git": ("git",),
     "CI/CD": ("ci/cd", "ci cd", "cicd", "gitlab ci", "github actions"),
     "Machine Learning": ("machine learning", "hoc may", "ml"),
+    "AI": ("ai", "artificial intelligence", "tri tue nhan tao", "ttnt"),
+    "LLM": (
+        "llm",
+        "large language model",
+        "large language models",
+        "mo hinh ngon ngu lon",
+        "chatgpt",
+        "generative ai",
+        "genai",
+    ),
+    "Prompt Engineering": (
+        "prompt engineering",
+        "prompt",
+        "ky thuat prompt",
+        "viet prompt",
+    ),
     "Deep Learning": ("deep learning", "hoc sau"),
     "Regression": ("regression", "hoi quy"),
     "Classification": ("classification", "phan loai"),
@@ -78,7 +98,15 @@ SKILL_ALIASES: dict[str, tuple[str, ...]] = {
     "Scikit-learn": ("scikit-learn", "scikit learn", "sklearn"),
     "Pandas": ("pandas",),
     "NumPy": ("numpy",),
+    "Statistics": ("statistics", "statistical analysis", "thong ke", "xac suat thong ke"),
+    "Data Science": ("data science", "khoa hoc du lieu"),
     "Data Analysis": ("data analysis", "phan tich du lieu"),
+    "Data Visualization": (
+        "data visualization",
+        "visualization",
+        "truc quan hoa du lieu",
+        "bieu do",
+    ),
     "Data Engineering": ("data engineering",),
     "ETL": ("etl", "elt", "etl/elt"),
     "Apache Spark": ("apache spark", "spark"),
@@ -114,6 +142,14 @@ TOPIC_ALIASES: dict[str, tuple[str, ...]] = {
         "mobile",
     ),
     "Data Science": ("data science", "khoa hoc du lieu"),
+    "Artificial Intelligence": (
+        "ai",
+        "artificial intelligence",
+        "tri tue nhan tao",
+        "generative ai",
+        "genai",
+        "llm",
+    ),
     "Data Engineering": ("data engineering", "ky thuat du lieu"),
     "Machine Learning": ("machine learning", "hoc may"),
     "Database": ("database", "co so du lieu", "csdl"),
@@ -122,6 +158,81 @@ TOPIC_ALIASES: dict[str, tuple[str, ...]] = {
     "UI/UX Design": ("ui/ux design", "thiet ke ui ux", "thiet ke giao dien"),
     "Cybersecurity": ("cybersecurity", "an toan thong tin", "bao mat"),
     "Project Management": ("project management", "quan ly du an", "agile", "scrum"),
+}
+
+# Directed relatedness graph for semantic-ish partial credit. Exact canonical
+# matches still score 1.0; these edges only prevent synonym/near-domain misses
+# such as "tri tue nhan tao" vs a Machine Learning course.
+RELATED_SKILLS: dict[str, dict[str, float]] = {
+    "AI": {
+        "Machine Learning": 0.80,
+        "Deep Learning": 0.80,
+        "LLM": 0.75,
+        "Prompt Engineering": 0.65,
+        "Data Science": 0.55,
+        "Python": 0.35,
+    },
+    "Machine Learning": {
+        "AI": 0.80,
+        "Deep Learning": 0.70,
+        "Data Science": 0.60,
+        "Data Analysis": 0.45,
+        "Statistics": 0.45,
+        "Python": 0.35,
+    },
+    "Deep Learning": {
+        "AI": 0.80,
+        "Machine Learning": 0.70,
+        "LLM": 0.55,
+        "Python": 0.35,
+    },
+    "LLM": {
+        "AI": 0.75,
+        "Deep Learning": 0.55,
+        "Prompt Engineering": 0.70,
+        "Python": 0.30,
+    },
+    "Data Science": {
+        "Machine Learning": 0.60,
+        "AI": 0.55,
+        "Data Analysis": 0.60,
+        "Statistics": 0.55,
+        "Python": 0.40,
+    },
+    "Data Analysis": {
+        "Data Science": 0.60,
+        "Statistics": 0.50,
+        "Data Visualization": 0.55,
+        "Python": 0.35,
+        "Pandas": 0.45,
+    },
+    "REST API": {"API": 0.90},
+    "API": {"REST API": 0.90},
+    "JavaScript": {"TypeScript": 0.55, "React": 0.35, "Node.js": 0.35},
+    "TypeScript": {"JavaScript": 0.55, "React": 0.35},
+    "React": {"JavaScript": 0.35, "TypeScript": 0.35},
+}
+
+RELATED_TOPICS: dict[str, dict[str, float]] = {
+    "Artificial Intelligence": {
+        "Machine Learning": 0.80,
+        "Data Science": 0.60,
+    },
+    "Machine Learning": {
+        "Artificial Intelligence": 0.80,
+        "Data Science": 0.65,
+    },
+    "Data Science": {
+        "Machine Learning": 0.65,
+        "Artificial Intelligence": 0.60,
+        "Data Engineering": 0.40,
+        "Database": 0.30,
+    },
+    "Web Development": {"Frontend": 0.60, "Backend": 0.60},
+    "Frontend": {"Web Development": 0.60, "UI/UX Design": 0.35},
+    "Backend": {"Web Development": 0.60, "Database": 0.45, "Cloud": 0.35},
+    "DevOps": {"Cloud": 0.60, "Backend": 0.30},
+    "Cloud": {"DevOps": 0.60, "Backend": 0.35},
 }
 
 
@@ -186,6 +297,40 @@ def canonical_topic(value: str) -> str | None:
         if _token_boundary_contains(normalized, alias):
             return canonical
     return None
+
+
+def _canonical_or_text(value: object, resolver) -> str:
+    text = str(value or "").strip()
+    return resolver(text) or text
+
+
+def _related_score(
+    left: str,
+    right: str,
+    graph: dict[str, dict[str, float]],
+) -> float:
+    if not left or not right:
+        return 0.0
+    if left.casefold() == right.casefold():
+        return 1.0
+    return max(
+        graph.get(left, {}).get(right, 0.0),
+        graph.get(right, {}).get(left, 0.0),
+    )
+
+
+def skill_similarity(left: object, right: object) -> float:
+    """1.0 for same skill, 0..1 partial for known related skills."""
+    left_skill = _canonical_or_text(left, canonical_skill)
+    right_skill = _canonical_or_text(right, canonical_skill)
+    return _related_score(left_skill, right_skill, RELATED_SKILLS)
+
+
+def topic_similarity(left: object, right: object) -> float:
+    """1.0 for same topic, 0..1 partial for known related topics."""
+    left_topic = _canonical_or_text(left, canonical_topic)
+    right_topic = _canonical_or_text(right, canonical_topic)
+    return _related_score(left_topic, right_topic, RELATED_TOPICS)
 
 
 def _scan(text: str, index: list[tuple[str, str]]) -> list[str]:
@@ -360,6 +505,9 @@ ROLE_ALIASES: dict[str, tuple[str, ...]] = {
         "ai engineer",
         "ky su machine learning",
         "ky su ai",
+        "ky su tri tue nhan tao",
+        "chuyen vien ai",
+        "ai developer",
     ),
     "DevOps Engineer": (
         "devops engineer",

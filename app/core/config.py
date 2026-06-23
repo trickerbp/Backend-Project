@@ -34,6 +34,15 @@ def _optional_int_env(name: str, default: int) -> int:
     except ValueError as exc:
         raise RuntimeError(f"Environment variable {name} must be an integer") from exc
 
+def _optional_float_env(name: str, default: float) -> float:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return default
+    try:
+        return float(value)
+    except ValueError as exc:
+        raise RuntimeError(f"Environment variable {name} must be a number") from exc
+
 
 def _optional_bool_env(name: str, default: bool) -> bool:
     value = os.getenv(name)
@@ -55,6 +64,19 @@ class Settings:
     max_upload_size_mb: int
     use_openai_extraction: bool
     openai_api_key: str
+    openai_extraction_model: str
+    openai_extraction_max_input_chars: int
+    openai_extraction_max_output_tokens: int
+    openai_extraction_min_missing_fields: int
+    openai_extraction_timeout_seconds: float
+    use_embedding_matching: bool
+    openai_embedding_model: str
+    openai_embedding_dimensions: int
+    openai_embedding_timeout_seconds: float
+    openai_embedding_max_input_chars: int
+    openai_embedding_skip_if_local_at_least: float
+    openai_embedding_skip_if_local_below: float
+    openai_embedding_expand_low_confidence: bool
     use_azure_document_intelligence: bool
     azure_document_intelligence_endpoint: str
     azure_document_intelligence_key: str
@@ -97,6 +119,55 @@ def get_settings() -> Settings:
         max_upload_size_mb=_optional_int_env("MAX_UPLOAD_SIZE_MB", 20),
         use_openai_extraction=_optional_bool_env("USE_OPENAI_EXTRACTION", False),
         openai_api_key=_optional_env("OPENAI_API_KEY", ""),
+        openai_extraction_model=_optional_env(
+            "OPENAI_EXTRACTION_MODEL",
+            "gpt-5.4-mini",
+        ),
+        openai_extraction_max_input_chars=_optional_int_env(
+            "OPENAI_EXTRACTION_MAX_INPUT_CHARS",
+            3500,
+        ),
+        openai_extraction_max_output_tokens=_optional_int_env(
+            "OPENAI_EXTRACTION_MAX_OUTPUT_TOKENS",
+            800,
+        ),
+        openai_extraction_min_missing_fields=_optional_int_env(
+            "OPENAI_EXTRACTION_MIN_MISSING_FIELDS",
+            2,
+        ),
+        openai_extraction_timeout_seconds=_optional_float_env(
+            "OPENAI_EXTRACTION_TIMEOUT_SECONDS",
+            12.0,
+        ),
+        use_embedding_matching=_optional_bool_env("USE_EMBEDDING_MATCHING", False),
+        openai_embedding_model=_optional_env(
+            "OPENAI_EMBEDDING_MODEL",
+            "text-embedding-3-small",
+        ),
+        openai_embedding_dimensions=_optional_int_env(
+            "OPENAI_EMBEDDING_DIMENSIONS",
+            0,
+        ),
+        openai_embedding_timeout_seconds=_optional_float_env(
+            "OPENAI_EMBEDDING_TIMEOUT_SECONDS",
+            8.0,
+        ),
+        openai_embedding_max_input_chars=_optional_int_env(
+            "OPENAI_EMBEDDING_MAX_INPUT_CHARS",
+            900,
+        ),
+        openai_embedding_skip_if_local_at_least=_optional_float_env(
+            "OPENAI_EMBEDDING_SKIP_IF_LOCAL_AT_LEAST",
+            0.72,
+        ),
+        openai_embedding_skip_if_local_below=_optional_float_env(
+            "OPENAI_EMBEDDING_SKIP_IF_LOCAL_BELOW",
+            0.12,
+        ),
+        openai_embedding_expand_low_confidence=_optional_bool_env(
+            "OPENAI_EMBEDDING_EXPAND_LOW_CONFIDENCE",
+            False,
+        ),
         use_azure_document_intelligence=_optional_bool_env(
             "USE_AZURE_DOCUMENT_INTELLIGENCE",
             False,

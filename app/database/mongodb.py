@@ -67,6 +67,11 @@ async def create_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.recommendations.create_index("student_profile_id")
     await db.recommendations.create_index([("created_at", -1)])
 
+    # recommendation_events
+    await db.recommendation_events.create_index("student_id")
+    await db.recommendation_events.create_index("course_id")
+    await db.recommendation_events.create_index([("created_at", -1)])
+
     # processing_logs
     await db.processing_logs.create_index("resource_id")
     await db.processing_logs.create_index("course_id")

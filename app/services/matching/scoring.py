@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
-from app.services.matching.skill_taxonomy import canonical_role
+from app.services.matching.semantic import semantic_similarity
+from app.services.matching.skill_taxonomy import (
+    canonical_role,
+    skill_similarity,
+    topic_similarity,
+)
 from app.services.matching.text_similarity import text_similarity
 
 
@@ -20,7 +25,7 @@ class ScoreWeights:
     """Relative weight of each scoring dimension.
 
     Dimensions split into two roles:
-      * relevance (skill_gap, topic, goal): decide whether a course is relevant
+      * relevance (skill_gap, semantic, topic, goal): decide whether a course is relevant
         to the learner at all.
       * context (level, duration): modulate ranking among relevant courses but
         never create relevance on their own.
@@ -31,27 +36,31 @@ class ScoreWeights:
     bonus, never part of the denominator.
     """
 
-    # Tuned on the gold set (scripts/tune_weights.py) by max nDCG@5 under
-    # leave-one-student-out CV: LOSO 0.96 ~ in-sample 0.964, so the choice
-    # generalizes rather than overfits. The grid pushed the context/bonus
-    # dimensions to their floor, i.e. skill_gap should dominate (~4x the rest).
-    skill_gap: float = 0.40
-    topic: float = 0.10
-    goal: float = 0.10
-    level: float = 0.08
-    duration: float = 0.04
+    # Semantic-first recommender. Behavior is optional personalization from
+    # views/selections; level remains tiny because self-report is unreliable.
+    semantic: float = 0.55
+    behavior: float = 0.15
+    skill_gap: float = 0.12
+    topic: float = 0.08
+    goal: float = 0.06
+    level: float = 0.02
+    duration: float = 0.02
     # Additive bonus multiplier applied to the cosine similarity (0..1).
-    text_similarity_bonus: float = 0.05
+    text_similarity_bonus: float = 0.03
 
 
 # Dimensions that establish relevance. If every applicable one scores zero, the
 # course is treated as irrelevant regardless of level/duration fit.
-_RELEVANCE_DIMENSIONS = ("skill_gap", "topic", "goal")
+_RELEVANCE_DIMENSIONS = ("skill_gap", "semantic", "behavior", "topic", "goal")
+_SEMANTIC_RELEVANCE_FLOOR = 0.35
+_BEHAVIOR_RELEVANCE_FLOOR = 0.15
 
 
 @dataclass(frozen=True, slots=True)
 class DimensionScores:
     skill_gap: float = 0.0
+    semantic: float = 0.0
+    behavior: float = 0.0
     topic: float = 0.0
     level: float = 0.0
     goal: float = 0.0
@@ -89,6 +98,8 @@ class CourseMatch:
             "unmet_prerequisites": self.unmet_prerequisites,
             "score_detail": {
                 "skill_gap_score": round(self.score_detail.skill_gap, 4),
+                "semantic_match_score": round(self.score_detail.semantic, 4),
+                "behavior_match_score": round(self.score_detail.behavior, 4),
                 "topic_match_score": round(self.score_detail.topic, 4),
                 "level_match_score": round(self.score_detail.level, 4),
                 "goal_match_score": round(self.score_detail.goal, 4),
@@ -149,15 +160,25 @@ def _score_skill_gap(
     if not desired_display:
         return None, [], []
 
-    course_keys = set(_course_skill_pool(course))
-
     gap_keys = set(desired_display) - current
     target_keys = gap_keys or set(desired_display)
-    covered = target_keys & course_keys
-    missing = target_keys - course_keys
-    score = len(covered) / len(target_keys)
-    matched_display = [desired_display[k] for k in sorted(covered)]
-    missing_display = [desired_display[k] for k in sorted(missing)]
+    course_pool = _course_skill_pool(course)
+    matched_display: list[str] = []
+    missing_display: list[str] = []
+    total = 0.0
+
+    for key in sorted(target_keys):
+        desired = desired_display[key]
+        best = 0.0
+        for course_skill in course_pool.values():
+            best = max(best, skill_similarity(desired, course_skill))
+        total += best
+        if best >= 0.35:
+            matched_display.append(desired)
+        else:
+            missing_display.append(desired)
+
+    score = total / len(target_keys)
     return score, matched_display, missing_display
 
 
@@ -169,12 +190,21 @@ def _score_topic(
     interested_display = _display_map(profile.get("interested_topics"))
     if not interested_display:
         return None, []
-    course_topics = _lower_set(course.get("course_topics")) | _lower_set(
-        course.get("extracted_topics")
-    )
-    hits = set(interested_display) & course_topics
-    score = len(hits) / len(interested_display)
-    matched_display = [interested_display[k] for k in sorted(hits)]
+    course_topics = _display_map(course.get("course_topics"))
+    course_topics.update(_display_map(course.get("extracted_topics")))
+    matched_display: list[str] = []
+    total = 0.0
+
+    for key in sorted(interested_display):
+        interested = interested_display[key]
+        best = 0.0
+        for course_topic in course_topics.values():
+            best = max(best, topic_similarity(interested, course_topic))
+        total += best
+        if best >= 0.35:
+            matched_display.append(interested)
+
+    score = total / len(interested_display)
     return score, matched_display
 
 
@@ -263,6 +293,23 @@ def _score_text_similarity(
     )
 
 
+def _score_semantic(
+    profile: Mapping[str, Any],
+    course: Mapping[str, Any],
+) -> float | None:
+    return semantic_similarity(profile, course)
+
+
+def _score_behavior(course: Mapping[str, Any]) -> float | None:
+    value = course.get("behavior_score")
+    if value is None:
+        return None
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return None
+
+
 def _check_prerequisites(
     profile: Mapping[str, Any],
     course: Mapping[str, Any],
@@ -307,6 +354,8 @@ def score_course_for_student(
     weights = weights or ScoreWeights()
 
     skill_score, matched_skills, missing_skills = _score_skill_gap(profile, course)
+    semantic_score = _score_semantic(profile, course)
+    behavior_score = _score_behavior(course)
     topic_score, matched_topics = _score_topic(profile, course)
     goal_score = _score_goal(profile, course)
     level_score = _score_level(profile, course)
@@ -316,6 +365,8 @@ def score_course_for_student(
 
     dimension_values = {
         "skill_gap": skill_score,
+        "semantic": semantic_score,
+        "behavior": behavior_score,
         "topic": topic_score,
         "goal": goal_score,
         "level": level_score,
@@ -323,6 +374,8 @@ def score_course_for_student(
     }
     dimension_weights = {
         "skill_gap": weights.skill_gap,
+        "semantic": weights.semantic,
+        "behavior": weights.behavior,
         "topic": weights.topic,
         "goal": weights.goal,
         "level": weights.level,
@@ -331,6 +384,8 @@ def score_course_for_student(
 
     detail = DimensionScores(
         skill_gap=skill_score or 0.0,
+        semantic=semantic_score or 0.0,
+        behavior=behavior_score or 0.0,
         topic=topic_score or 0.0,
         level=level_score or 0.0,
         goal=goal_score or 0.0,
@@ -349,6 +404,13 @@ def score_course_for_student(
         if name in applicable
     }
 
+    def has_relevance(name: str, value: float) -> bool:
+        if name == "semantic":
+            return value >= _SEMANTIC_RELEVANCE_FLOOR
+        if name == "behavior":
+            return value >= _BEHAVIOR_RELEVANCE_FLOOR
+        return value > 0
+
     if not relevance_applicable:
         # The learner gave no relevance signal at all (no desired skills, no
         # topics, no career goal). Level/duration cannot establish relevance on
@@ -356,7 +418,9 @@ def score_course_for_student(
         # keeps an unrelated course from scoring high just because its level and
         # schedule happen to fit.
         base = similarity_score
-    elif not any(value > 0 for value in relevance_applicable.values()):
+    elif not any(
+        has_relevance(name, value) for name, value in relevance_applicable.items()
+    ):
         # Relevance was assessable and every relevance dimension scored zero:
         # the course is not relevant to this learner. Gate to zero regardless of
         # level/duration fit.
@@ -384,6 +448,8 @@ def score_course_for_student(
         goal_score=goal_score,
         career_goal=profile.get("career_goal"),
         duration_score=duration_score,
+        semantic_score=semantic_score,
+        behavior_score=behavior_score,
         similarity_score=similarity_score,
         prerequisites_met=prerequisites_met,
         unmet=unmet,
@@ -415,6 +481,8 @@ def _build_reasons(
     goal_score: float | None,
     career_goal: str | None,
     duration_score: float | None,
+    semantic_score: float | None,
+    behavior_score: float | None,
     similarity_score: float,
     prerequisites_met: bool,
     unmet: list[str],
@@ -436,6 +504,10 @@ def _build_reasons(
         reasons.append(f"Phù hợp trình độ hiện tại (mức {course_level})")
     if duration_score is not None and duration_score >= 0.8:
         reasons.append("Thời lượng phù hợp với quỹ thời gian học của bạn")
+    if semantic_score is not None and semantic_score >= 0.45:
+        reasons.append("Nội dung khóa học gần với nhu cầu của bạn về ngữ nghĩa/ngữ cảnh")
+    if behavior_score is not None and behavior_score >= 0.45:
+        reasons.append("Được ưu tiên theo hành vi xem/chọn khóa học gần đây của bạn")
     if similarity_score >= 0.3:
         reasons.append("Nội dung khóa học sát với nhu cầu bạn mô tả")
     if missing_skills:
